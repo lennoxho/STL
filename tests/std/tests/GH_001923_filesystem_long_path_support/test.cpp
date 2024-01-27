@@ -24,15 +24,12 @@
 // ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-// TODO:
-// 4) Test plan
-// 5) Write test cases
-
 #define NOMINMAX
 
 // The annotation for function 'RegOpenKeyExW' on _Param_(3) does not apply to a value type
 #pragma warning(disable:6553)
 
+#include <algorithm>
 #include <array>
 #include <cassert>
 #include <filesystem>
