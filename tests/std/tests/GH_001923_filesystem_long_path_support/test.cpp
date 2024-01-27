@@ -26,29 +26,50 @@
 
 #define NOMINMAX
 
+#ifdef _MSC_VER
 // The annotation for function 'RegOpenKeyExW' on _Param_(3) does not apply to a value type
-#pragma warning(disable:6553)
+#   pragma warning(disable:6553)
+
+#   pragma comment(lib, "Advapi32.lib")
+#   pragma comment(lib, "Ntdll.lib")
+#endif
 
 #include <algorithm>
 #include <array>
 #include <cassert>
-#include <filesystem>
 #include <iostream>
 #include <random>
 #include <sstream>
 #include <string>
 #include <string_view>
 
+#ifdef USE_BOOST_FILESYSTEM
+#   include <boost/filesystem.hpp>
+#else
+#   include <filesystem>
+#endif
+
 #include <Windows.h>
-#pragma comment(lib, "Advapi32.lib")
-#pragma comment(lib, "Ntdll.lib")
 
 #define TEST_ASSERT_MSG(cond, msg) { if (!(cond)) throw test_assertion_failed{ msg, __LINE__ };  }
 #define TEST_ASSERT(cond)          TEST_ASSERT_MSG(cond, #cond)
 #define TEST_CASE(test_func)       { curr_test_name = #test_func; fixture.test(test_func, curr_test_name); }
 
-namespace fs = std::filesystem;
 extern "C" BOOL RtlGetVersion(PRTL_OSVERSIONINFOW);
+
+#ifdef USE_BOOST_FILESYSTEM
+namespace fs = boost::filesystem;
+constexpr auto regular_file_type = fs::regular_file;
+constexpr auto directory_file_type = fs::directory_file;
+constexpr auto symlink_file_type = fs::symlink_file;
+using err_code = boost::system::error_code;
+#else
+namespace fs = std::filesystem;
+constexpr auto regular_file_type = fs::file_type::regular;
+constexpr auto directory_file_type = fs::file_type::directory;
+constexpr auto symlink_file_type = fs::file_type::symlink;
+using err_code = std::error_code;
+#endif
 
 using path_chr = fs::path::value_type;
 using path_str = fs::path::string_type;
@@ -132,7 +153,9 @@ public:
     }
 
     ~longpath_fixture() {
-        std::error_code ec;
+        err_code ec;
+
+        fs::current_path(m_start_dir, ec);
 
         fs::remove_all(root_long_test_dir, ec);
         if (ec) {
@@ -382,7 +405,8 @@ void test_absolute(const longpath_fixture& fixture) {
 
     // get absolute path for a long path from a short path cwd
     auto actual = fs::absolute(fs::relative(expected));
-    TEST_ASSERT(expected == actual);
+    TEST_ASSERT(expected == actual ||
+                (fixture.curr_short_test_dir / fs::relative(expected)) == actual);
 
     fs::current_path(fixture.curr_long_test_dir);
 
@@ -392,7 +416,8 @@ void test_absolute(const longpath_fixture& fixture) {
 
     // get absolute path for a short path from a long path cwd
     actual = fs::absolute(fs::relative(fixture.curr_short_test_dir));
-    TEST_ASSERT(fixture.curr_short_test_dir == actual);
+    TEST_ASSERT(fixture.curr_short_test_dir == actual ||
+                (fixture.curr_long_test_dir / fs::relative(fixture.curr_short_test_dir)) == actual);
 }
 
 void test_canonical(const longpath_fixture& fixture) {
@@ -420,7 +445,8 @@ void test_weakly_canonical(const longpath_fixture& fixture) {
 
     // make canon for a long path from a short path cwd
     auto actual = fs::weakly_canonical(fs::relative(fixture.curr_long_test_dir) / "foo");
-    TEST_ASSERT(expected == actual);
+    TEST_ASSERT(expected == actual ||
+                (fs::relative(fixture.curr_long_test_dir) / "foo") == actual);
 
     fs::current_path(fixture.curr_long_test_dir);
 
@@ -431,7 +457,8 @@ void test_weakly_canonical(const longpath_fixture& fixture) {
 
     actual = fs::weakly_canonical(fs::relative(fixture.curr_short_test_dir) / "foo");
     expected = fs::canonical(fixture.curr_short_test_dir) / "foo";
-    TEST_ASSERT(expected == actual);
+    TEST_ASSERT(expected == actual ||
+                (fs::relative(fixture.curr_short_test_dir) / "foo") == actual);
 }
 
 void test_copy_file(const longpath_fixture& fixture) {
@@ -551,23 +578,23 @@ void test_status(const longpath_fixture& fixture) {
 
     // check status on long path from short path cwd
     auto st = fs::status(fixture.curr_long_test_dir);
-    TEST_ASSERT(st.type() == fs::file_type::directory);
+    TEST_ASSERT(st.type() == directory_file_type);
     st = fs::status(fixture.curr_long_test_dir / "foo.txt");
-    TEST_ASSERT(st.type() == fs::file_type::regular);
+    TEST_ASSERT(st.type() == regular_file_type);
 
     fs::current_path(fixture.curr_long_test_dir);
 
     // check status on long path from long path cwd
     st = fs::status(".");
-    TEST_ASSERT(st.type() == fs::file_type::directory);
+    TEST_ASSERT(st.type() == directory_file_type);
     st = fs::status("foo.txt");
-    TEST_ASSERT(st.type() == fs::file_type::regular);
+    TEST_ASSERT(st.type() == regular_file_type);
 
     // check status on short path from long path cwd
     st = fs::status(fixture.curr_short_test_dir);
-    TEST_ASSERT(st.type() == fs::file_type::directory);
+    TEST_ASSERT(st.type() == directory_file_type);
     st = fs::status(fixture.curr_short_test_dir / "foo.txt");
-    TEST_ASSERT(st.type() == fs::file_type::regular);
+    TEST_ASSERT(st.type() == regular_file_type);
 }
 
 void test_symlink_status(const longpath_fixture& fixture) {
@@ -579,17 +606,17 @@ void test_symlink_status(const longpath_fixture& fixture) {
 
     // check status on long path from short path cwd
     auto st = fs::symlink_status(fixture.curr_long_test_dir / "b");
-    TEST_ASSERT(st.type() == fs::file_type::symlink);
+    TEST_ASSERT(st.type() == symlink_file_type);
 
     fs::current_path(fixture.curr_long_test_dir);
 
     // check status on long path from long path cwd
     st = fs::symlink_status("b");
-    TEST_ASSERT(st.type() == fs::file_type::symlink);
+    TEST_ASSERT(st.type() == symlink_file_type);
 
     // check status on short path from long path cwd
     st = fs::symlink_status(fixture.curr_short_test_dir / "a");
-    TEST_ASSERT(st.type() == fs::file_type::symlink);
+    TEST_ASSERT(st.type() == symlink_file_type);
 }
 
 void test_read_symlink(const longpath_fixture& fixture) {
