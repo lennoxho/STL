@@ -99,6 +99,7 @@ class longpath_fixture {
 
 public:
     fs::path root_short_test_dir;
+    fs::path root_long_test_base_dir;
     fs::path root_long_test_dir;
     fs::path curr_short_test_dir;
     fs::path curr_long_test_dir;
@@ -140,7 +141,8 @@ public:
         }
 
         {
-            root_long_test_dir = test_dir;
+            root_long_test_base_dir = test_dir / generate_subdirname(32);
+            root_long_test_dir = root_long_test_base_dir;
 
             while (root_long_test_dir.native().size() <= windows_max_path_len) {
                 root_long_test_dir /= generate_subdirname(32);
@@ -157,14 +159,14 @@ public:
 
         fs::current_path(m_start_dir, ec);
 
-        fs::remove_all(root_long_test_dir, ec);
-        if (ec) {
-            std::wcerr << L"Warning, failed to clean up short root directory " << root_long_test_dir << L" after test.\n";
-        }
-
         fs::remove_all(root_short_test_dir, ec);
         if (ec) {
             std::wcerr << L"Warning, failed to clean up short root directory " << root_short_test_dir << L" after test.\n";
+        }
+
+        fs::remove_all(root_long_test_base_dir, ec);
+        if (ec) {
+            std::wcerr << L"Warning, failed to clean up long root directory " << root_long_test_base_dir << L" after test.\n";
         }
     }
 
